@@ -85,5 +85,8 @@ plt.title('policy function without pension')
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
+plt.plot(a, aplus[0, :, 0], marker='o')
+plt.plot(a, aplus[0, :, 1], marker='s')
+plt.plot(a, aplus[0, :, 2], marker='^')
 plt.show()
 
