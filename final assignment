@@ -2,72 +2,92 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-# --- パラメータ設定 ---
-gamma = 2.0
-beta = 0.985 ** 20
-r = 1.025 ** 20 - 1.0
-l = np.array([0.8027, 1.0, 1.2457])  # 生産性タイプ：low, mid, high
-NL = len(l)
-y = np.array([1.0, 1.2, 0.0])  # 年金なし → 老年期所得 = 0
+# utility function
+def util(c, gamma):
+    return (np.maximum(c, 1e-8)**(1 - gamma)) / (1 - gamma) if gamma != 1 else np.log(np.maximum(c, 1e-8))
 
-# --- 資産グリッド ---
+# setting parameters
+gamma = 2.0                # 相対的リスク回避度
+beta = 0.96                # 割引因子
+r = 0.04                   # 利子率
+R = 1 + r                  # 資本収益率
+JJ = 3                     # 3期間モデルに統一
+l = np.array([0.6, 1.0, 1.5])  # 生産性の高低（統一）
+NL = len(l)
+
+prob = np.array([          # 生産性の遷移確率（マルコフ連鎖）
+    [0.7451, 0.2528, 0.0021],
+    [0.1360, 0.7281, 0.1361],
+    [0.0021, 0.2528, 0.7451]
+])
+
+# making grids
 a_l = 0.0
-a_u = 2.0
+a_u = 6.0
 NA = 100
 a = np.linspace(a_l, a_u, NA)
 
-# --- 効用関数 ---
-def util(c, gamma):
-   return (c**(1 - gamma)) / (1 - gamma) if gamma != 1 else np.log(c)
+# initiallization
+v = np.zeros((JJ, NA, NL))
+iaplus = np.zeros((JJ, NA, NL), dtype=int)
+aplus = np.zeros((JJ, NA, NL))
+c = np.zeros((JJ, NA, NL))
 
-# 初期化
-v = np.zeros((3, NA, NL))
-iaplus = np.zeros((3, NA, NL), dtype=int)
-aplus = np.zeros((3, NA, NL))
-
-# --- 期間3（老年期）: 所得は年金がないため0 ---
+# backward induction term3
 for ia in range(NA):
-    c = (1.0 + r) * a[ia] + y[2]
-    v[2, ia, :] = util(np.maximum(c, 1e-8), gamma)
+    for il in range(NL):
+        v[JJ-1, ia, il] = util(R * a[ia], gamma)
+        aplus[JJ-1, ia, il] = 0.0
+        c[JJ-1, ia, il] = R * a[ia]
 
-# --- 期間2（中年期）---
-for il in range(NL):
-    for ia in range(NA):
-        reward = np.full(NA, -np.inf)
-        for iap in range(NA):
-            c = l[il] + (1.0 + r) * a[ia] - a[iap]
-            if c > 0:
-                reward[iap] = util(c, gamma) + beta * v[2, iap, il]
-        i_star = np.argmax(reward)
-        v[1, ia, il] = reward[i_star]
-        iaplus[1, ia, il] = i_star
-        aplus[1, ia, il] = a[i_star]
+# backward induction term2,1
+for ij in range(JJ-2, -1, -1):
+    for il in range(NL):
+        for ia in range(NA):
+            reward = np.full(NA, -np.inf)
+            for iap in range(NA):
+                EV = 0.0
+                for ilp in range(NL):
+                    EV += prob[il, ilp] * v[ij+1, iap, ilp]
 
-# --- 期間1（若年期）---
-for il in range(NL):
-    for ia in range(NA):
-        reward = np.full(NA, -np.inf)
-        for iap in range(NA):
-            EV = v[1, iap, il]  # 簡略化：遷移行列使わず固定
-            c = l[il] + (1.0 + r) * a[ia] - a[iap]
-            if c > 0:
-                reward[iap] = util(c, gamma) + beta * EV
-        i_star = np.argmax(reward)
-        v[0, ia, il] = reward[i_star]
-        iaplus[0, ia, il] = i_star
-        aplus[0, ia, il] = a[i_star]
+                cons = l[il] + R * a[ia] - a[iap]
+                if cons > 0:
+                    reward[iap] = util(cons, gamma) + beta * EV
 
-# --- グラフ描画：若年期の貯蓄政策関数（a1 → a2）---
+            i_star = np.argmax(reward)
+            iaplus[ij, ia, il] = i_star
+            aplus[ij, ia, il] = a[i_star]
+            c[ij, ia, il] = l[il] + R * a[ia] - aplus[ij, ia, il]
+            v[ij, ia, il] = reward[i_star]
+
+mu = np.zeros((JJ, NA, NL))
+mu[0, 0, :] = 1.0 / NL
+for ij in range(JJ - 1):
+    for il in range(NL):
+        for ia in range(NA):
+            iap = iaplus[ij, ia, il]
+            for ilp in range(NL):
+                mu[ij + 1, iap, ilp] += prob[il, ilp] * mu[ij, ia, il]
+
+# 確認のため、若年期から中年期への貯蓄政策関数（a1→a2）を取得
+policy_a2 = aplus[0, :, :]  # shape: (NA, NL)
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import warnings
+warnings.filterwarnings("ignore")
+
+# プロット
 plt.figure(figsize=(8, 6))
-labels = ['Low productivity', 'Mid productivity', 'High productivity']
-markers = ['o', 's', '^']
+labels = ['low', 'mid', 'high']
 for il in range(NL):
-    plt.plot(a, aplus[0, :, il], label=labels[il], marker=markers[il], markevery=10)
-
-plt.xlabel("若年期期初の資産 a₁（利子を除く）", fontsize=12)
-plt.ylabel("中年期期初の資産 a₂（利子を除く）", fontsize=12)
-plt.title("貯蓄政策関数（年金なし）", fontsize=14)
+    plt.plot(a, policy_a2[:, il], label=labels[il])
+plt.xlabel('youngterm asset')
+plt.ylabel('midterm asset')
+plt.title('policy function without pension')
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
 plt.show()
+
