@@ -1,6 +1,8 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
+import matplotlib.pyplot as plt
 
 # utility function
 def util(c, gamma):
@@ -71,12 +73,6 @@ for ij in range(JJ - 1):
 
 # 確認のため、若年期から中年期への貯蓄政策関数（a1→a2）を取得
 policy_a2 = aplus[0, :, :]  # shape: (NA, NL)
-
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import warnings
-warnings.filterwarnings("ignore")
 
 # プロット
 plt.figure(figsize=(8, 6))
