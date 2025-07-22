@@ -1,8 +1,6 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-import matplotlib.pyplot as plt
 
 # utility function
 def util(c, gamma):
@@ -71,22 +69,24 @@ for ij in range(JJ - 1):
             for ilp in range(NL):
                 mu[ij + 1, iap, ilp] += prob[il, ilp] * mu[ij, ia, il]
 
-# 確認のため、若年期から中年期への貯蓄政策関数（a1→a2）を取得
 policy_a2 = aplus[0, :, :]  # shape: (NA, NL)
 
 # プロット
-plt.figure(figsize=(8, 6))
-labels = ['low', 'mid', 'high']
+plt.figure()
+
 for il in range(NL):
-    plt.plot(a, policy_a2[:, il], label=labels[il])
+    plt.plot(a,
+        policy_a2[:, il],
+        color=colors[il],
+        marker=markers[il],
+        markevery=5,
+        label=labels[il]
+    )
+
 plt.xlabel('youngterm asset')
 plt.ylabel('midterm asset')
 plt.title('policy function without pension')
 plt.grid(True)
-plt.legend()
+plt.legend(loc='upper left')  
 plt.tight_layout()
-plt.plot(a, aplus[0, :, 0], marker='o', markevery=5)
-plt.plot(a, aplus[0, :, 1], marker='s', markevery=5)
-plt.plot(a, aplus[0, :, 2], marker='^', markevery=5)
 plt.show()
-
