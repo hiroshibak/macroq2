@@ -1,0 +1,148 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# utility function
+def util(c, gamma):
+    return (np.maximum(c, 1e-8)**(1 - gamma)) / (1 - gamma) if gamma != 1 else np.log(np.maximum(c, 1e-8))
+
+# setting parameters
+gamma = 2.0                # 相対的リスク回避度
+beta = 0.96                # 割引因子
+r = 0.04                   # 利子率
+R = 1 + r                  # 資本収益率
+JJ = 3                     # 3期間モデルに統一
+l = np.array([0.6, 1.0, 1.5])  # 生産性の高低（統一）
+NL = len(l)
+
+prob = np.array([          # 生産性の遷移確率（マルコフ連鎖）
+    [0.7451, 0.2528, 0.0021],
+    [0.1360, 0.7281, 0.1361],
+    [0.0021, 0.2528, 0.7451]
+])
+
+# making grids
+a_l = 0.0
+a_u = 6.0
+NA = 100
+a = np.linspace(a_l, a_u, NA)
+
+# initiallization
+v = np.zeros((JJ, NA, NL))
+iaplus = np.zeros((JJ, NA, NL), dtype=int)
+aplus = np.zeros((JJ, NA, NL))
+c = np.zeros((JJ, NA, NL))
+
+# backward induction term3
+for ia in range(NA):
+    for il in range(NL):
+        v[JJ-1, ia, il] = util(R * a[ia], gamma)
+        aplus[JJ-1, ia, il] = 0.0
+        c[JJ-1, ia, il] = R * a[ia]
+
+# backward induction term2,1
+for ij in range(JJ-2, -1, -1):
+    for il in range(NL):
+        for ia in range(NA):
+            reward = np.full(NA, -np.inf)
+            for iap in range(NA):
+                EV = 0.0
+                for ilp in range(NL):
+                    EV += prob[il, ilp] * v[ij+1, iap, ilp]
+
+                cons = l[il] + R * a[ia] - a[iap]
+                if cons > 0:
+                    reward[iap] = util(cons, gamma) + beta * EV
+
+            i_star = np.argmax(reward)
+            iaplus[ij, ia, il] = i_star
+            aplus[ij, ia, il] = a[i_star]
+            c[ij, ia, il] = l[il] + R * a[ia] - aplus[ij, ia, il]
+            v[ij, ia, il] = reward[i_star]
+
+mu = np.zeros((JJ, NA, NL))
+mu[0, 0, :] = 1.0 / NL
+for ij in range(JJ - 1):
+    for il in range(NL):
+        for ia in range(NA):
+            iap = iaplus[ij, ia, il]
+            for ilp in range(NL):
+                mu[ij + 1, iap, ilp] += prob[il, ilp] * mu[ij, ia, il]
+
+policy_a2 = aplus[0, :, :]  # shape: (NA, NL)
+
+# １）中年期（ij=1）の労働所得に対して30%の税を課して総税収を計算
+tax_rate = 0.30
+# mu[1,:,:] が中年期の人口分布（NA×NL）、l[il] が各生産性の労働所得
+tax_total = tax_rate * np.sum(mu[1, :, :] * l[None, :])
+
+# ２）老年期（ij=2）の全人口に等しく分配する年金給付額を計算
+total_elderly = np.sum(mu[2, :, :])
+pension_per_person = (1 + r) * tax_total / total_elderly
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ———— 問３：年金導入後の再最適化と政策関数の比較 ————
+
+# 1) 年金・税収を既に計算済み (tax_rate, pension_per_person が定義済み)
+# 2) 新しい価値関数・政策関数用配列の初期化
+v_p     = np.zeros((JJ, NA, NL))
+iaplus_p= np.zeros((JJ, NA, NL), dtype=int)
+aplus_p = np.zeros((JJ, NA, NL))
+c_p     = np.zeros((JJ, NA, NL))
+
+# 3) 期間3（老年期）：年金を考慮
+for ia in range(NA):
+    for il in range(NL):
+        cons = R * a[ia] + pension_per_person
+        v_p[JJ-1, ia, il] = util(cons, gamma)
+        aplus_p[JJ-1, ia, il] = 0.0
+        c_p[JJ-1, ia, il] = cons
+
+# 4) 期間2・1（中年期・若年期）：中年期に所得税を課す
+for ij in range(JJ-2, -1, -1):
+    for il in range(NL):
+        for ia in range(NA):
+            reward = np.full(NA, -np.inf)
+            for iap in range(NA):
+                # 期待値計算
+                EV = 0.0
+                for ilp in range(NL):
+                    EV += prob[il, ilp] * v_p[ij+1, iap, ilp]
+                # 税引き後所得
+                income = l[il] * (1 - tax_rate) if ij == 1 else l[il]
+                cons = income + R * a[ia] - a[iap]
+                if cons > 0:
+                    reward[iap] = util(cons, gamma) + beta * EV
+
+            i_star = np.argmax(reward)
+            iaplus_p[ij, ia, il] = i_star
+            aplus_p[ij, ia, il]  = a[i_star]
+            c_p[ij, ia, il]      = income + R * a[ia] - aplus_p[ij, ia, il]
+            v_p[ij, ia, il]      = reward[i_star]
+
+# 5) 政策関数の抽出
+policy_no_pension = policy_a2        # aplus[0, :, :]
+policy_with_pension = aplus_p[0, :, :]
+
+# ———— 問４：平均期待生涯効用の計算 ————
+
+# 初期資産 a₁=0 に対応するインデックス
+ia0 = 0
+
+# （1）年金なしケース
+util_no_pension = np.sum(mu[0, ia0, :] * v[0, ia0, :])
+
+# （2）年金ありケース
+util_with_pension = np.sum(mu[0, ia0, :] * v_p[0, ia0, :])
+
+# 結果を出力
+print(f"without pension average expected utility = {util_no_pension:.5f}")
+print(f"pension average expected utility  = {util_with_pension:.5f}")
+
+# 増減の判定
+if util_with_pension > util_no_pension:
+    print("→ utility increases")
+else:
+    print("→ utility decreases")
