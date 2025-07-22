@@ -71,22 +71,25 @@ for ij in range(JJ - 1):
 
 policy_a2 = aplus[0, :, :]  # shape: (NA, NL)
 
-# プロット
-plt.figure()
+labels  = ['low', 'mid', 'high']
+markers = ['o', 's', '^']
+colors  = ['tab:blue', 'tab:orange', 'tab:green']
 
+plt.figure(figsize=(8, 6))
 for il in range(NL):
-    plt.plot(a,
-        policy_a2[:, il],
-        color=colors[il],
-        marker=markers[il],
-        markevery=5,
-        label=labels[il]
+    plt.plot(
+        a,
+        policy_a2[:, il],           # aplus[0,:,il] と同じ
+        color=colors[il],           # 線と凡例の色
+        marker=markers[il],         # マーカー形状
+        markevery=5,                # 5点ごとに表示
+        label=labels[il]            # 凡例ラベル
     )
 
 plt.xlabel('youngterm asset')
 plt.ylabel('midterm asset')
 plt.title('policy function without pension')
 plt.grid(True)
-plt.legend(loc='upper left')  
+plt.legend(loc='upper left')      # 凡例を左上に
 plt.tight_layout()
 plt.show()
